@@ -2,10 +2,11 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Clock, Star, Utensils, Salad, Plus, Minus } from 'lucide-react';
+import { Clock, Star, Plus, Minus } from 'lucide-react';
 import Image from 'next/image';
 import { useParams } from 'next/navigation';
-import { useState } from 'react';
+import { useCartStore } from '@/app/store/cart-store';
+import Link from 'next/link';
 
 interface MenuItem {
   id: string;
@@ -29,7 +30,7 @@ interface Restaurant {
 
 export default function RestaurantPage() {
   const { id } = useParams();
-  const [cart, setCart] = useState<{ [key: string]: number }>({});
+  const cart = useCartStore((state) => state.cart);
 
   // Mock data - replace with API call
   const restaurant: Restaurant = {
@@ -61,18 +62,57 @@ export default function RestaurantPage() {
     ],
   };
 
-  const addToCart = (itemId: string) => {
-    setCart(prev => ({ ...prev, [itemId]: (prev[itemId] || 0) + 1 }));
+  // Add item to cart
+  const handleAddToCart = (item: MenuItem) => {
+    useCartStore.setState((state) => {
+      const existingItem = state.cart.find((i) => i.id === item.id);
+      if (existingItem) {
+        // Update quantity if item already exists
+        return {
+          cart: state.cart.map((i) =>
+            i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i
+          ),
+        };
+      } else {
+        // Add new item to cart
+        return {
+          cart: [
+            ...state.cart,
+            {
+              id: item.id,
+              name: item.name,
+              price: item.price,
+              quantity: 1,
+              restaurantId: restaurant.id,
+              restaurantName: restaurant.name,
+            },
+          ],
+        };
+      }
+    });
   };
 
-  const removeFromCart = (itemId: string) => {
-    if (cart[itemId] > 1) {
-      setCart(prev => ({ ...prev, [itemId]: prev[itemId] - 1 }));
-    } else {
-      const newCart = { ...cart };
-      delete newCart[itemId];
-      setCart(newCart);
-    }
+  // Remove item from cart
+  const handleRemoveFromCart = (itemId: string) => {
+    useCartStore.setState((state) => ({
+      cart: state.cart.filter((item) => item.id !== itemId),
+    }));
+  };
+
+  // Update item quantity
+  const handleUpdateQuantity = (itemId: string, quantity: number) => {
+    useCartStore.setState((state) => ({
+      cart: state.cart
+        .map((item) =>
+          item.id === itemId ? { ...item, quantity } : item
+        )
+        .filter((item) => item.quantity > 0), // Remove if quantity is 0
+    }));
+  };
+
+  // Calculate total price
+  const calculateTotal = () => {
+    return cart.reduce((total, item) => total + item.price * item.quantity, 0);
   };
 
   return (
@@ -94,7 +134,7 @@ export default function RestaurantPage() {
                 className="rounded-xl object-cover h-64 w-full"
               />
             </motion.div>
-            
+
             <div className="md:col-span-2">
               <motion.div
                 initial={{ y: 20 }}
@@ -139,7 +179,7 @@ export default function RestaurantPage() {
                     <p className="text-gray-600 mt-2">{item.description}</p>
                     <div className="mt-2 flex items-center space-x-4">
                       <span className="text-lg font-medium">${item.price}</span>
-                      {item.dietary.map(diet => (
+                      {item.dietary.map((diet) => (
                         <span
                           key={diet}
                           className="px-2 py-1 bg-green-100 text-green-600 rounded-full text-sm"
@@ -150,7 +190,7 @@ export default function RestaurantPage() {
                     </div>
                   </div>
                   <button
-                    onClick={() => addToCart(item.id)}
+                    onClick={() => handleAddToCart(item)}
                     className="ml-4 bg-orange-500 text-white p-3 rounded-full hover:bg-orange-600 transition"
                   >
                     <Plus className="w-6 h-6" />
@@ -168,50 +208,50 @@ export default function RestaurantPage() {
               className="bg-white rounded-xl p-6 shadow-lg sticky top-8"
             >
               <h2 className="text-2xl font-bold mb-6">Your Order</h2>
-              {Object.keys(cart).length === 0 ? (
+              {cart.length === 0 ? (
                 <p className="text-gray-500">Your cart is empty</p>
               ) : (
                 <div className="space-y-4">
-                  {restaurant.menu
-                    .filter(item => cart[item.id])
-                    .map(item => (
-                      <div key={item.id} className="flex justify-between items-center">
-                        <div>
-                          <p className="font-medium">{item.name}</p>
-                          <div className="flex items-center space-x-2 mt-1">
-                            <button
-                              onClick={() => removeFromCart(item.id)}
-                              className="text-orange-500 hover:text-orange-600"
-                            >
-                              <Minus className="w-4 h-4" />
-                            </button>
-                            <span>{cart[item.id]}</span>
-                            <button
-                              onClick={() => addToCart(item.id)}
-                              className="text-orange-500 hover:text-orange-600"
-                            >
-                              <Plus className="w-4 h-4" />
-                            </button>
-                          </div>
+                  {cart.map((item) => (
+                    <div key={item.id} className="flex justify-between items-center">
+                      <div>
+                        <p className="font-medium">{item.name}</p>
+                        <div className="flex items-center space-x-2 mt-1">
+                          <button
+                            onClick={() =>
+                              handleUpdateQuantity(item.id, item.quantity - 1)
+                            }
+                            className="text-orange-500 hover:text-orange-600"
+                          >
+                            <Minus className="w-4 h-4" />
+                          </button>
+                          <span>{item.quantity}</span>
+                          <button
+                            onClick={() =>
+                              handleUpdateQuantity(item.id, item.quantity + 1)
+                            }
+                            className="text-orange-500 hover:text-orange-600"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
                         </div>
-                        <span className="font-medium">
-                          ${(item.price * cart[item.id]).toFixed(2)}
-                        </span>
                       </div>
-                    ))}
+                      <span className="font-medium">
+                        ${(item.price * item.quantity).toFixed(2)}
+                      </span>
+                    </div>
+                  ))}
                   <div className="pt-4 border-t mt-4">
                     <div className="flex justify-between font-bold text-lg">
                       <span>Total:</span>
-                      <span>
-                        $
-                        {restaurant.menu
-                          .reduce((sum, item) => sum + item.price * (cart[item.id] || 0), 0)
-                          .toFixed(2)}
-                      </span>
+                      <span>${calculateTotal().toFixed(2)}</span>
                     </div>
-                    <button className="w-full bg-orange-500 text-white py-4 rounded-full mt-6 hover:bg-orange-600 transition">
+                    <Link
+                      href="/cart"
+                      className="w-full bg-orange-500 text-white py-4 rounded-full mt-6 hover:bg-orange-600 transition block text-center"
+                    >
                       Checkout
-                    </button>
+                    </Link>
                   </div>
                 </div>
               )}
